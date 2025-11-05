@@ -1,8 +1,8 @@
 {
   "type": "commonjs",
-  "name": "bitescript-rtc",
+  "name": "bytescript-rtc",
   "version": "1.0.0",
-  "description": "Real-time communication service for BiteScript",
+  "description": "Real-time communication service for ByteScript",
   "main": "dist/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -19,7 +19,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/biteScript/bitescript-rtc.git"
+    "url": "git+https://github.com/byteScript/bytescript-rtc.git"
   },
   "keywords": [
     "webrtc",
@@ -27,7 +27,7 @@
     "signaling",
     "typescript"
   ],
-  "author": "BiteScript Team",
+  "author": "ByteScript Team",
   "license": "ISC",
   "engines": {
     "node": ">=18.0.0"
@@ -41,9 +41,9 @@
     "access": "public"
   },
   "bugs": {
-    "url": "https://github.com/biteScript/bitescript-rtc/issues"
+    "url": "https://github.com/byteScript/bytescript-rtc/issues"
   },
-  "homepage": "https://github.com/biteScript/bitescript-rtc#readme",
+  "homepage": "https://github.com/byteScript/bytescript-rtc#readme",
   "devDependencies": {
     "@eslint/js": "^9.37.0",
     "@types/compression": "^1.8.1",

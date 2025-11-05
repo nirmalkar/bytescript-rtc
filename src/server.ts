@@ -31,7 +31,7 @@ export function createServer(): ServerReturnType {
   app.use(compression());
 
   app.get('/api/health', (_req: Request, res: Response) => {
-    res.json({ ok: true, service: 'bitescript-rtc' });
+    res.json({ ok: true, service: 'bytescript-rtc' });
   });
 
   // Return ICE servers object for clients (protect in prod)
