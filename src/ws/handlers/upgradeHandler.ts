@@ -55,8 +55,13 @@ export function createUpgradeHandler(opts: { wss: WSS; allowedOrigins: string[] 
       try {
         const url = new URL(req.url || '/', `http://${req.headers.host}`);
         const token = url.searchParams.get('token');
-        const userId = url.searchParams.get('userId');
         const roomId = url.searchParams.get('roomId');
+
+        // Identity comes from the verified JWT in production; URL param is only
+        // used as a fallback in development where the token is optional.
+        let authenticatedUserId: string | null = isDevelopment
+          ? (url.searchParams.get('userId') ?? null)
+          : null;
 
         if (!isDevelopment && !token) {
           socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
@@ -71,6 +76,9 @@ export function createUpgradeHandler(opts: { wss: WSS; allowedOrigins: string[] 
             socket.destroy();
             return;
           }
+          // Trust JWT payload for identity — never accept URL-param userId in prod
+          authenticatedUserId =
+            jwtResult.payload.userId ?? jwtResult.payload.sub ?? null;
         }
 
         wss.handleUpgrade(req, socket, head, (ws: WebSocket) => {
@@ -85,8 +93,11 @@ export function createUpgradeHandler(opts: { wss: WSS; allowedOrigins: string[] 
           };
 
           try {
-            client.id = userId || client.id || Math.random().toString(36).substring(2, 10);
-            client.userId = userId || null;
+            client.id =
+              authenticatedUserId ||
+              client.id ||
+              Math.random().toString(36).substring(2, 10);
+            client.userId = authenticatedUserId || null;
             client.isAlive = true;
             client.ip = requestIp;
             client.userAgent = (req.headers['user-agent'] as string) || 'unknown';

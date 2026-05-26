@@ -104,14 +104,13 @@ export function monitorSuspiciousHeaders(
   headers: IncomingHttpHeaders,
   context: SecurityContext
 ): void {
+  // x-forwarded-for, x-real-ip, and cf-connecting-ip are standard proxy/CDN headers
+  // and are intentionally excluded to avoid false-positive alerts
   const suspiciousHeaders = [
-    'x-forwarded-for',
-    'x-real-ip',
-    'cf-connecting-ip',
-    'x-client-ip',
     'x-originating-ip',
     'x-remote-ip',
     'x-remote-addr',
+    'x-client-ip',
   ];
 
   const detectedSuspiciousHeaders = Object.entries(headers).filter(([key]) =>

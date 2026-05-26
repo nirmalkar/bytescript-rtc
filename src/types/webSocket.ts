@@ -60,8 +60,4 @@ export interface RoomDoc {
   clients: Set<WebSocketClient>;
 }
 
-export const DEFAULT_ALLOWED_ORIGINS = [
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'https://your-production-domain.com',
-];
+export const DEFAULT_ALLOWED_ORIGINS = ['http://localhost:3000', 'http://localhost:3001'];

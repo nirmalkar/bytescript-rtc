@@ -132,7 +132,8 @@ export async function handleConnection(wsRaw: WS, req: IncomingMessage, ctx: Ctx
       error: err.message,
       stack: err.stack,
     });
-    void cleanup();
+    // Terminate triggers 'close', which runs cleanup — don't call cleanup() here directly.
+    ws.terminate();
   });
 
   // Message handler with rate limiting and error handling

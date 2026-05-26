@@ -8,15 +8,6 @@ import { logger } from '../utils/logger';
 
 import { securityMonitoringMiddleware } from './securityMonitoring';
 
-interface ConnectionAttempt {
-  count: number;
-  lastAttempt: number;
-}
-
-const connectionAttempts = new Map<string, ConnectionAttempt>();
-const wsConnections = new Map<string, number>();
-
-const MAX_WS_CONNECTIONS_PER_IP = 5;
 
 export function createSecurityMiddleware(config: Config): RequestHandler[] {
   const corsOptions: CorsOptions = {
@@ -60,15 +51,6 @@ export function createSecurityMiddleware(config: Config): RequestHandler[] {
     exposedHeaders: ['Content-Range', 'X-Content-Range'],
   };
 
-  // API rate limiter (local to factory)
-  const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per windowMs
-    message: { error: 'Too many requests, please try again later.' },
-    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-  });
-
   // Default rate limiter for most API endpoints
   const defaultLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -102,102 +84,13 @@ export function createSecurityMiddleware(config: Config): RequestHandler[] {
 
   // Apply rate limiting based on path
   const rateLimiter: RequestHandler = (req: Request, res: Response, next: NextFunction) => {
-    // Apply stricter limits to auth endpoints
     if (req.path.startsWith('/api/auth/')) {
       return authLimiter(req, res, next);
     }
-    // Apply default limits to all other API endpoints
     if (req.path.startsWith('/api/')) {
       return defaultLimiter(req, res, next);
     }
-    // Skip rate limiting for other routes (e.g., static files)
     return next();
-  };
-
-  // WebSocket connection limiter middleware
-  const wsConnectionLimiter = (req: Request, res: Response, next: NextFunction): void => {
-    // Only apply to WebSocket upgrade requests
-    if ((req.headers.upgrade || '').toLowerCase() === 'websocket') {
-      const ip = req.ip || req.socket.remoteAddress || 'unknown';
-      const userAgent = req.headers['user-agent'] || 'unknown';
-
-      // Track connection attempts
-      const now = Date.now();
-      const attemptWindow = now - 60000; // 1 minute window
-
-      // Clean up old attempts
-      connectionAttempts.forEach((value, key) => {
-        if (value.lastAttempt < attemptWindow) {
-          connectionAttempts.delete(key);
-        }
-      });
-
-      // Get or initialize attempt counter
-      const attempts = connectionAttempts.get(ip) || { count: 0, lastAttempt: 0 };
-
-      // Check rate limit (e.g., max 10 connection attempts per minute)
-      if (attempts.count >= 10 && now - attempts.lastAttempt < 60000) {
-        logger.warn('WebSocket connection rate limit exceeded', {
-          ip,
-          userAgent,
-          path: req.path,
-          attempts: attempts.count,
-        });
-
-        res.status(429).json({
-          error: 'Too many connection attempts',
-          retryAfter: Math.ceil((attempts.lastAttempt + 60000 - now) / 1000),
-        });
-        return;
-      }
-
-      // Update attempt counter
-      connectionAttempts.set(ip, {
-        count: attempts.count + 1,
-        lastAttempt: now,
-      });
-
-      const connectionCount = wsConnections.get(ip) || 0;
-      if (connectionCount >= MAX_WS_CONNECTIONS_PER_IP) {
-        logger.warn('Maximum WebSocket connections exceeded', {
-          ip,
-          userAgent,
-          path: req.path,
-          currentConnections: connectionCount,
-          maxConnections: MAX_WS_CONNECTIONS_PER_IP,
-        });
-
-        res.status(429).json({
-          error: 'Too many WebSocket connections',
-          retryAfter: 300, // 5 minutes in seconds
-        });
-        return;
-      }
-
-      // Log new connection
-      logger.info('New WebSocket connection', {
-        ip,
-        userAgent,
-        path: req.path,
-        connectionCount: connectionCount + 1,
-      });
-
-      // Increment connection count
-      wsConnections.set(ip, connectionCount + 1);
-
-      // Decrement on connection close
-      req.on('close', () => {
-        const currentCount = wsConnections.get(ip) || 0;
-        if (currentCount > 0) {
-          wsConnections.set(ip, currentCount - 1);
-          logger.debug('WebSocket connection closed', {
-            ip,
-            remainingConnections: currentCount - 1,
-          });
-        }
-      });
-    }
-    next();
   };
 
   // Security headers middleware with enhanced CSP
@@ -210,9 +103,6 @@ export function createSecurityMiddleware(config: Config): RequestHandler[] {
 
     // Rate limiting for HTTP requests
     rateLimiter,
-
-    // WebSocket connection limiting
-    wsConnectionLimiter,
 
     // Set security headers using helmet with more permissive CSP for web apps
     helmet({
@@ -248,21 +138,12 @@ export function createSecurityMiddleware(config: Config): RequestHandler[] {
       referrerPolicy: {
         policy: 'strict-origin-when-cross-origin',
       },
-      xssFilter: true,
     }),
 
     // Disable X-Powered-By header
     (_req: Request, res: Response, next: NextFunction): void => {
       res.removeHeader('X-Powered-By');
       next();
-    },
-
-    // Apply rate limiting to all API routes
-    (req: Request, res: Response, next: NextFunction): void => {
-      if (req.path.startsWith('/api/')) {
-        return void apiLimiter(req, res, next);
-      }
-      return void next();
     },
   ];
 }

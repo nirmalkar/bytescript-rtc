@@ -6,6 +6,7 @@ import type { Request, Response } from 'express';
 
 import { config } from './configuration';
 import { signWsToken } from './auth/jwt';
+import { verifyFirebaseIdToken } from './auth/firebaseAuth';
 import createSecurityMiddleware from './middleware/security';
 import { createWsServer } from './ws/wsServer';
 
@@ -55,19 +56,22 @@ export function createServer(): ServerReturnType {
     return res.json({ iceServers });
   });
 
-  app.post('/api/ws-token', (req: Request, res: Response) => {
-    // In production, you should validate the user session/authorization here
-    // For example:
-    // if (!req.user) {
-    //   return res.status(403).json({ error: 'Unauthorized' });
-    // }
+  app.post('/api/ws-token', async (req: Request, res: Response) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'missing_authorization_header' });
+    }
 
-    // Get user ID and room ID from the request
-    const userId = typeof req.body?.userId === 'string' ? req.body.userId : undefined;
-    const roomId = typeof req.body?.roomId === 'string' ? req.body.roomId : undefined;
+    const idToken = authHeader.slice(7);
 
-    if (!userId) {
-      return res.status(400).json({ error: 'User ID is required' });
+    if (!config.firebase.projectId) {
+      console.error('FIREBASE_PROJECT_ID is not configured');
+      return res.status(500).json({ error: 'server_misconfigured' });
+    }
+
+    const firebaseUser = await verifyFirebaseIdToken(idToken, config.firebase.projectId);
+    if (!firebaseUser) {
+      return res.status(401).json({ error: 'invalid_or_expired_token' });
     }
 
     if (!config.jwt.secret || config.jwt.secret === 'default_jwt_secret') {
@@ -75,14 +79,11 @@ export function createServer(): ServerReturnType {
       return res.status(500).json({ error: 'server_misconfigured' });
     }
 
+    const roomId = typeof req.body?.roomId === 'string' ? req.body.roomId : undefined;
+
     try {
       const token = signWsToken(
-        // payload
-        {
-          ...(userId ? { userId } : {}),
-          ...(roomId ? { roomId } : {}),
-        },
-        // opts
+        { userId: firebaseUser.uid, ...(roomId ? { roomId } : {}) },
         { expiresIn: '5m' }
       );
 

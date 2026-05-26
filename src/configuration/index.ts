@@ -44,6 +44,11 @@ export interface Config {
     toFile: boolean;
   };
 
+  // Firebase
+  firebase: {
+    projectId: string;
+  };
+
   // Monitoring
   monitoring: {
     prometheus: {
@@ -90,6 +95,11 @@ export const config: Config = {
     toFile: process.env.LOG_TO_FILE === 'true',
   },
 
+  // Firebase
+  firebase: {
+    projectId: process.env.FIREBASE_PROJECT_ID || '',
+  },
+
   // Monitoring
   monitoring: {
     prometheus: {
@@ -107,6 +117,10 @@ if (!config.jwt.secret || config.jwt.secret === 'your_jwt_secret_here') {
 if (config.nodeEnv === 'production') {
   if (!process.env.WS_JWT_SECRET) {
     throw new Error('WS_JWT_SECRET is required in production');
+  }
+
+  if (!process.env.FIREBASE_PROJECT_ID) {
+    throw new Error('FIREBASE_PROJECT_ID is required in production');
   }
 
   if (config.cors.allowedOrigins.length === 0) {

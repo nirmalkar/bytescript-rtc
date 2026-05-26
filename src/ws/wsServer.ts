@@ -70,15 +70,29 @@ export function createWsServer(server: HttpServer): WsServer {
   const roomManager = new InMemoryRoomManager();
   const activeConnections = new Set<WebSocketClient>();
   const rooms = new Map<string, SharedRoomDoc>();
+  const connectionsByIp = new Map<string, number>();
+  const MAX_WS_PER_IP = 5;
 
   const instanceId = generateUniqueId();
 
   // Wire upgrade handler (delegates auth & wss.handleUpgrade)
   server.on('upgrade', (request, socket, head) => {
+    const ip = request.socket.remoteAddress || 'unknown';
+    const current = connectionsByIp.get(ip) || 0;
+
+    if (current >= MAX_WS_PER_IP) {
+      logger.warn('Per-IP WebSocket connection limit exceeded', { ip, current });
+      try {
+        socket.write('HTTP/1.1 429 Too Many Connections\r\n\r\n');
+      } catch {
+        // ignore
+      }
+      socket.destroy();
+      return;
+    }
+
     try {
       const upgradeHandler = createUpgradeHandler({ wss, allowedOrigins: originsToUse });
-      // The upgrade handler is responsible for handling the upgrade request
-      // and calling wss.handleUpgrade() when appropriate
       upgradeHandler(request, asSocket(socket), head);
     } catch (error) {
       logger.error('Unexpected error in upgrade handler: %o', error);
@@ -90,6 +104,15 @@ export function createWsServer(server: HttpServer): WsServer {
 
   // Handle new connections
   wss.on('connection', (ws: WebSocket, request: IncomingMessage) => {
+    const ip = request.socket.remoteAddress || 'unknown';
+    connectionsByIp.set(ip, (connectionsByIp.get(ip) || 0) + 1);
+
+    ws.once('close', () => {
+      const count = connectionsByIp.get(ip) || 0;
+      if (count <= 1) connectionsByIp.delete(ip);
+      else connectionsByIp.set(ip, count - 1);
+    });
+
     const client = asWebSocketClient(ws);
     void handleConnection(client, request, {
       wss,
